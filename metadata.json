@@ -1,0 +1,5 @@
+{
+  "name": "DriveLink Keeper",
+  "description": "A smart repository for Google Drive links. Organize, tag, and use AI to quickly find the exact document you need based on purpose and context.",
+  "requestFramePermissions": []
+}
