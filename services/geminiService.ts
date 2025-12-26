@@ -4,25 +4,77 @@ import { GDriveLink, Category } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
-export const analyzeLinkPurpose = async (title: string, purpose: string): Promise<{ tags: string[], category: Category }> => {
+/**
+ * Generates professional metadata (title, purpose, tags, category) based on a URL and user keywords.
+ */
+export const generateMetadataFromKeywords = async (url: string, keywords: string): Promise<{ title: string, purpose: string, tags: string[], category: Category }> => {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Analyze this Google Drive link metadata and suggest appropriate tags (max 5) and one category from ['Work', 'Personal', 'Projects', 'Education', 'Other'].
-      Title: ${title}
-      Purpose: ${purpose}`,
+      contents: `You are a professional librarian and document organizer. 
+      Input URL: ${url}
+      User Keywords: ${keywords}
+      
+      Task:
+      1. Create a professional Title that is exactly 5 to 8 words long.
+      2. Write a detailed "Purpose" description (2-3 sentences) that explains what this link is for, using the keywords as a foundation. This description will be used later for natural language searching, so make it descriptive.
+      3. Suggest 4-6 relevant tags.
+      4. Select the most appropriate Category from: ['Work', 'Personal', 'Projects', 'Education', 'Other'].
+      
+      Return the result in valid JSON format.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            title: { type: Type.STRING },
+            purpose: { type: Type.STRING },
             tags: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
             },
-            category: {
-              type: Type.STRING,
-            }
+            category: { type: Type.STRING }
+          },
+          required: ["title", "purpose", "tags", "category"]
+        }
+      }
+    });
+
+    const result = JSON.parse(response.text || '{}');
+    return {
+      title: result.title || "Document based on " + keywords,
+      purpose: result.purpose || "Context provided: " + keywords,
+      tags: result.tags || [],
+      category: (result.category as Category) || 'Other'
+    };
+  } catch (error) {
+    console.error("Metadata generation failed:", error);
+    return { 
+      title: "Document: " + keywords, 
+      purpose: "Manual entry for keywords: " + keywords, 
+      tags: keywords.split(',').map(k => k.trim()), 
+      category: 'Other' 
+    };
+  }
+};
+
+/**
+ * Standard refinement of existing metadata if the user manually edits.
+ */
+export const analyzeLinkPurpose = async (title: string, purpose: string): Promise<{ tags: string[], category: Category }> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Refine tags and category for:
+      Title: ${title}
+      Description: ${purpose}`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            category: { type: Type.STRING }
           },
           required: ["tags", "category"]
         }
@@ -32,89 +84,37 @@ export const analyzeLinkPurpose = async (title: string, purpose: string): Promis
     const result = JSON.parse(response.text || '{}');
     return {
       tags: result.tags || [],
-      category: result.category as Category || 'Other'
+      category: (result.category as Category) || 'Other'
     };
   } catch (error) {
-    console.error("AI Analysis failed:", error);
     return { tags: [], category: 'Other' };
   }
 };
 
 /**
- * Scans a GDrive URL and generates an appropriate title and description/purpose.
- * Uses Google Search grounding to find public context/metadata for the link.
+ * Natural language search implementation.
  */
-export const scanDriveLink = async (url: string): Promise<{ title: string, purpose: string, tags: string[], category: Category }> => {
-  try {
-    // We use gemini-3-pro-preview for higher quality reasoning and search tool support
-    const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
-      contents: `You are a highly advanced Document Intelligence agent. I have a Google Drive link: ${url}. 
-      
-      Your goal is to perform a "deep scan" of this link. 
-      1. Use Google Search to find if this link is referenced anywhere online (e.g., public forums, project pages, shared resource lists).
-      2. Analyze the URL structure to identify if it's a Folder, Document, Spreadsheet, or Presentation.
-      3. Extract or infer the most specific title possible. Avoid generic names like "Google Drive Folder" unless absolutely no other info exists.
-      4. Write a "Purpose" description that explains what this asset is likely used for (e.g., "Project assets for the 2024 rebranding initiative" instead of "A shared folder").
-      5. Categorize it accurately into: ['Work', 'Personal', 'Projects', 'Education', 'Other'].
-      
-      Provide your findings in JSON format.`,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING, description: "Specific title of the file or folder." },
-            purpose: { type: Type.STRING, description: "Detailed explanation of why this link is valuable and what it contains." },
-            tags: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "3-5 relevant keywords for indexing."
-            },
-            category: { type: Type.STRING, description: "One of the predefined categories." }
-          },
-          required: ["title", "purpose", "tags", "category"]
-        }
-      }
-    });
-
-    const result = JSON.parse(response.text || '{}');
-    return {
-      title: result.title || "Untitled Drive Resource",
-      purpose: result.purpose || "No specific purpose could be inferred from the public link metadata.",
-      tags: result.tags || ["needs-review"],
-      category: (result.category as Category) || 'Other'
-    };
-  } catch (error) {
-    console.error("Link scanning failed:", error);
-    return { 
-      title: "Auto-detected Document", 
-      purpose: "Could not automatically scan the full content. The link might be private or newly created. Please provide manual context.", 
-      tags: ["manual-entry"], 
-      category: 'Other' 
-    };
-  }
-};
-
 export const findLinkWithAI = async (query: string, links: GDriveLink[]): Promise<string> => {
-  const context = links.map(l => `ID: ${l.id} | Title: ${l.title} | Purpose: ${l.purpose} | Tags: ${l.tags.join(', ')}`).join('\n');
+  const context = links.map(l => `ID: ${l.id} | Title: ${l.title} | Description: ${l.purpose} | Tags: ${l.tags.join(', ')}`).join('\n---\n');
   
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `You are a helpful assistant managing a link repository. 
-      User Query: "${query}"
+      model: "gemini-3-pro-preview", // Use Pro for better reasoning over large lists
+      contents: `You are an intelligent search agent for a private document repository.
       
-      Available Links:
+      User is asking: "${query}"
+      
+      Below is the repository metadata:
       ${context}
       
-      Instructions: Based on the query, identify the most relevant Link ID. If multiple are relevant, list them. If none are relevant, say "No relevant links found". Briefly explain why.`,
+      Task:
+      Identify the most relevant link(s). Explain briefly why they match the query based on the 'Description' and 'Title'. 
+      Return the answer in clear markdown. Mention the Titles specifically.`,
     });
 
-    return response.text || "I couldn't find a matching link.";
+    return response.text || "I couldn't find a matching link in your repository.";
   } catch (error) {
     console.error("Search failed:", error);
-    return "Something went wrong while searching.";
+    return "Something went wrong while performing the AI search.";
   }
 };

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { GDriveLink, Category } from './types';
-import { analyzeLinkPurpose, findLinkWithAI, scanDriveLink } from './services/geminiService';
-import { Plus, Search, Trash2, ExternalLink, Tag, Brain, Database, X, Filter, Sparkles, Loader2 } from 'lucide-react';
+import { generateMetadataFromKeywords, findLinkWithAI } from './services/geminiService';
+import { Plus, Search, Trash2, ExternalLink, Tag, Brain, Database, X, Filter, Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const App: React.FC = () => {
@@ -16,8 +16,10 @@ const App: React.FC = () => {
   const [isAiSearchOpen, setIsAiSearchOpen] = useState(false);
   
   // New Link Form
-  const [newLink, setNewLink] = useState({ url: '', title: '', purpose: '', tags: [] as string[], category: 'Other' as Category });
-  const [isScanning, setIsScanning] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [keywords, setKeywords] = useState('');
+  const [generatedInfo, setGeneratedInfo] = useState<{ title: string, purpose: string, tags: string[], category: Category } | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // AI Chat/Search
@@ -33,14 +35,13 @@ const App: React.FC = () => {
 
   const filteredLinks = useMemo(() => {
     return links.filter(link => {
-      const matchesSearch = 
-        link.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        link.purpose.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        link.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesCategory = activeCategory === 'All' || link.category === activeCategory;
-      return matchesSearch && matchesCategory;
-    });
-  }, [links, searchQuery, activeCategory]);
+      const q = searchQuery.toLowerCase();
+      return link.title.toLowerCase().includes(q) ||
+             link.purpose.toLowerCase().includes(q) ||
+             link.tags.some(t => t.toLowerCase().includes(q)) ||
+             link.category.toLowerCase().includes(q);
+    }).sort((a, b) => b.dateAdded - a.dateAdded);
+  }, [links, searchQuery]);
 
   const stats = useMemo(() => {
     return categories.map(cat => ({
@@ -49,45 +50,42 @@ const App: React.FC = () => {
     }));
   }, [links]);
 
-  const handleSmartScan = async () => {
-    if (!newLink.url) return;
-    setIsScanning(true);
-    const result = await scanDriveLink(newLink.url);
-    setNewLink(prev => ({
-      ...prev,
-      title: result.title,
-      purpose: result.purpose,
-      tags: result.tags,
-      category: result.category
-    }));
-    setIsScanning(false);
+  const handleGenerateMetadata = async () => {
+    if (!linkUrl || !keywords) return;
+    setIsGenerating(true);
+    const result = await generateMetadataFromKeywords(linkUrl, keywords);
+    setGeneratedInfo(result);
+    setIsGenerating(false);
   };
 
-  const handleAddLink = async () => {
-    if (!newLink.url || !newLink.title) return;
+  const handleSaveLink = () => {
+    if (!generatedInfo || !linkUrl) return;
     setIsSaving(true);
     
-    // Final refinement if user didn't scan or modified it
-    const finalMetadata = await analyzeLinkPurpose(newLink.title, newLink.purpose);
-    
-    const link: GDriveLink = {
+    const newEntry: GDriveLink = {
       id: crypto.randomUUID(),
-      url: newLink.url,
-      title: newLink.title,
-      purpose: newLink.purpose,
-      tags: newLink.tags.length > 0 ? newLink.tags : finalMetadata.tags,
-      category: newLink.category !== 'Other' ? newLink.category : finalMetadata.category,
+      url: linkUrl,
+      title: generatedInfo.title,
+      purpose: generatedInfo.purpose,
+      tags: generatedInfo.tags,
+      category: generatedInfo.category,
       dateAdded: Date.now(),
     };
 
-    setLinks(prev => [link, ...prev]);
-    setNewLink({ url: '', title: '', purpose: '', tags: [], category: 'Other' });
+    setLinks(prev => [newEntry, ...prev]);
+    resetForm();
     setIsModalOpen(false);
     setIsSaving(false);
   };
 
+  const resetForm = () => {
+    setLinkUrl('');
+    setKeywords('');
+    setGeneratedInfo(null);
+  };
+
   const handleDelete = (id: string) => {
-    if (confirm('Delete this link?')) {
+    if (confirm('Permanently remove this link from your library?')) {
       setLinks(prev => prev.filter(l => l.id !== id));
     }
   };
@@ -101,48 +99,54 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col shrink-0">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
-            <Database size={24} />
+      <aside className="w-full md:w-72 bg-white border-r border-slate-200 p-6 flex flex-col shrink-0">
+        <div className="flex items-center gap-3 mb-10">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+            <Database size={26} />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-800">LinkKeeper</h1>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight text-slate-800">DriveKeeper</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v2.0 AI-Powered</p>
+          </div>
         </div>
 
-        <nav className="space-y-1 mb-8">
+        <nav className="space-y-1.5 mb-10 flex-1">
           <button 
             onClick={() => setActiveCategory('All')}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === 'All' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeCategory === 'All' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <Filter size={18} />
-            All Links
+            Everything
           </button>
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Tag size={18} />
-              {cat}
-            </button>
-          ))}
+          <div className="py-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mb-2">Categories</p>
+            {categories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeCategory === cat ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <div className={`w-2 h-2 rounded-full ${cat === 'Work' ? 'bg-blue-500' : cat === 'Projects' ? 'bg-purple-500' : cat === 'Education' ? 'bg-emerald-500' : cat === 'Personal' ? 'bg-orange-500' : 'bg-slate-300'}`} />
+                {cat}
+              </button>
+            ))}
+          </div>
         </nav>
 
-        <div className="mt-auto pt-6 border-t border-slate-100">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Storage Insight</p>
-          <div className="h-40 w-full">
+        <div className="pt-6 border-t border-slate-100">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Distribution</p>
+          <div className="h-32 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats}>
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="count" radius={[4, 4, 4, 4]}>
                   {stats.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.name === activeCategory ? '#2563eb' : '#94a3b8'} />
+                    <Cell key={`cell-${index}`} fill={entry.name === activeCategory ? '#4f46e5' : '#e2e8f0'} />
                   ))}
                 </Bar>
                 <XAxis dataKey="name" hide />
-                <Tooltip />
+                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -150,95 +154,97 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <main className="flex-1 p-6 md:p-12 overflow-y-auto">
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Your Drive Repository</h2>
-            <p className="text-slate-500">Track and organize your valuable GDrive assets</p>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Library</h2>
+            <p className="text-slate-500 font-medium">Your curated knowledge base of Google Drive links.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsAiSearchOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-medium border border-purple-200"
+              className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-600 rounded-2xl hover:bg-indigo-50 transition-all font-bold border-2 border-indigo-100 shadow-sm active:scale-95"
             >
-              <Brain size={18} />
-              Ask AI
+              <Brain size={20} />
+              AI Search
             </button>
             <button 
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+              onClick={() => { resetForm(); setIsModalOpen(true); }}
+              className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200 active:scale-95"
             >
-              <Plus size={18} />
-              Add Link
+              <Plus size={22} />
+              Add Resource
             </button>
           </div>
         </header>
 
         {/* Search Bar */}
-        <div className="relative mb-8">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+        <div className="relative mb-12 max-w-2xl">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input 
             type="text"
-            placeholder="Search by title, tags, or purpose..."
-            className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none shadow-sm transition-all"
+            placeholder="Quick filter by title, tag, or context..."
+            className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 outline-none shadow-sm transition-all font-medium"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
         {/* Link Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8">
           {filteredLinks.length > 0 ? (
             filteredLinks.map(link => (
-              <div key={link.id} className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-md transition-shadow group relative overflow-hidden">
-                <div className={`absolute top-0 right-0 w-2 h-full ${link.category === 'Work' ? 'bg-blue-500' : link.category === 'Projects' ? 'bg-purple-500' : link.category === 'Education' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                <div className="flex justify-between items-start mb-4">
+              <div key={link.id} className="bg-white border border-slate-200 rounded-3xl p-8 hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
+                <div className={`absolute top-0 left-0 w-full h-1.5 ${link.category === 'Work' ? 'bg-blue-500' : link.category === 'Projects' ? 'bg-purple-500' : link.category === 'Education' ? 'bg-emerald-500' : link.category === 'Personal' ? 'bg-orange-500' : 'bg-slate-300'}`} />
+                
+                <div className="flex justify-between items-start mb-6">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{link.category}</span>
-                    <h3 className="text-lg font-bold text-slate-800 line-clamp-1 pr-4">{link.title}</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-wider rounded-md">{link.category}</span>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{new Date(link.dateAdded).toLocaleDateString()}</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">{link.title}</h3>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => handleDelete(link.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                  <button 
+                    onClick={() => handleDelete(link.id)}
+                    className="p-2 text-slate-300 hover:text-red-500 rounded-xl hover:bg-red-50 transition-colors shrink-0"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
                 
-                <p className="text-slate-600 text-sm mb-4 line-clamp-2 min-h-[2.5rem]">
-                  {link.purpose || "No purpose specified."}
+                <p className="text-slate-500 text-sm leading-relaxed mb-6 line-clamp-3">
+                  {link.purpose}
                 </p>
 
-                <div className="flex flex-wrap gap-2 mb-6">
+                <div className="flex flex-wrap gap-1.5 mb-8">
                   {link.tags.map(tag => (
-                    <span key={tag} className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase">
-                      {tag}
+                    <span key={tag} className="px-3 py-1 bg-indigo-50/50 text-indigo-500 text-[11px] font-bold rounded-lg border border-indigo-50">
+                      #{tag}
                     </span>
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                  <span className="text-xs text-slate-400">{new Date(link.dateAdded).toLocaleDateString()}</span>
+                <div className="pt-6 border-t border-slate-100 flex items-center justify-end">
                   <a 
                     href={link.url} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-blue-600 text-sm font-semibold hover:underline"
+                    className="group/link inline-flex items-center gap-2 px-5 py-2.5 bg-slate-50 text-slate-700 text-sm font-bold rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
                   >
-                    Open Link
-                    <ExternalLink size={14} />
+                    View Resource
+                    <ExternalLink size={16} className="group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
                   </a>
                 </div>
               </div>
             ))
           ) : (
-            <div className="col-span-full py-20 text-center">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                <Database size={32} />
+            <div className="col-span-full py-32 text-center">
+              <div className="w-24 h-24 bg-slate-100 rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-300">
+                <Database size={48} />
               </div>
-              <p className="text-slate-500 font-medium">No links found matching your criteria.</p>
+              <h4 className="text-xl font-bold text-slate-800 mb-2">No matches found</h4>
+              <p className="text-slate-500 max-w-xs mx-auto">Try a different keyword or add a new resource to your library.</p>
             </div>
           )}
         </div>
@@ -246,91 +252,105 @@ const App: React.FC = () => {
 
       {/* Add Link Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg my-auto animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-slate-800">Store New Link</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl my-auto animate-in fade-in zoom-in duration-300 overflow-hidden">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-indigo-50/30">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-600 rounded-xl text-white">
+                  <Plus size={20} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight">New Resource</h3>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-full transition-all">
+                <X size={24} />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="relative">
-                <label className="block text-sm font-bold text-slate-700 mb-1">Link URL</label>
-                <div className="flex gap-2">
+            
+            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Resource URL</label>
                   <input 
                     type="url"
-                    className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="https://drive.google.com/..."
-                    value={newLink.url}
-                    onChange={e => setNewLink(prev => ({ ...prev, url: e.target.value }))}
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all font-medium"
+                    placeholder="Paste the Google Drive link here..."
+                    value={linkUrl}
+                    onChange={e => setLinkUrl(e.target.value)}
                   />
-                  <button 
-                    onClick={handleSmartScan}
-                    disabled={isScanning || !newLink.url}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${isScanning ? 'bg-slate-100 text-slate-400' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
-                    title="Let AI scan the link to fill details"
-                  >
-                    {isScanning ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                    Scan
-                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Defining Keywords</label>
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all font-medium pr-32"
+                      placeholder="e.g. marketing, 2024, branding"
+                      value={keywords}
+                      onChange={e => setKeywords(e.target.value)}
+                    />
+                    <button 
+                      onClick={handleGenerateMetadata}
+                      disabled={isGenerating || !linkUrl || !keywords}
+                      className={`absolute right-2 top-2 bottom-2 px-4 rounded-xl flex items-center gap-2 font-bold text-sm transition-all ${isGenerating ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-100'}`}
+                    >
+                      {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                      AI Generate
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400 font-medium italic">Keywords help AI craft a better search description for you.</p>
                 </div>
               </div>
 
-              <div className={`transition-all duration-300 ${isScanning ? 'opacity-50 blur-sm' : 'opacity-100'}`}>
-                <div className="mb-4">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Title</label>
-                  <input 
-                    type="text"
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="Auto-detected or custom title"
-                    value={newLink.title}
-                    onChange={e => setNewLink(prev => ({ ...prev, title: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Purpose / Context</label>
-                  <textarea 
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none"
-                    placeholder="Why are you saving this? AI can help explain."
-                    value={newLink.purpose}
-                    onChange={e => setNewLink(prev => ({ ...prev, purpose: e.target.value }))}
-                  />
-                </div>
-                
-                {newLink.tags.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    {newLink.tags.map(tag => (
-                      <span key={tag} className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[10px] font-bold rounded uppercase border border-purple-100">
-                        {tag}
-                      </span>
+              {generatedInfo && (
+                <div className="space-y-6 pt-8 border-t border-dashed border-slate-200 animate-in slide-in-from-top-4 duration-500">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 w-fit">
+                    <Wand2 size={16} />
+                    <span className="text-xs font-black uppercase tracking-widest">AI Proposal Ready</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Professional Title (5-8 Words)</label>
+                    <input 
+                      type="text"
+                      className="w-full px-5 py-4 bg-white border-2 border-indigo-100 rounded-2xl focus:border-indigo-400 outline-none transition-all font-bold text-slate-800"
+                      value={generatedInfo.title}
+                      onChange={e => setGeneratedInfo({...generatedInfo, title: e.target.value})}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Contextual Description</label>
+                    <textarea 
+                      className="w-full px-5 py-4 bg-white border-2 border-indigo-100 rounded-2xl focus:border-indigo-400 outline-none transition-all font-medium text-slate-600 h-32 resize-none"
+                      value={generatedInfo.purpose}
+                      onChange={e => setGeneratedInfo({...generatedInfo, purpose: e.target.value})}
+                    />
+                    <p className="mt-2 text-xs text-slate-400">This description ensures natural language search works accurately.</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {generatedInfo.tags.map(tag => (
+                      <span key={tag} className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg">#{tag}</span>
                     ))}
                   </div>
-                )}
-              </div>
-
-              {!isScanning && !newLink.title && (
-                <div className="bg-blue-50 p-4 rounded-xl flex items-start gap-3 border border-blue-100">
-                  <Brain className="text-blue-600 shrink-0 mt-1" size={18} />
-                  <p className="text-xs text-blue-700 leading-relaxed">
-                    Paste a link and click <strong>Scan</strong>. Our AI will analyze the destination to automatically generate a title, purpose, and tags.
-                  </p>
                 </div>
               )}
             </div>
-            <div className="p-6 bg-slate-50 flex justify-end gap-3">
+
+            <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-slate-600 font-medium hover:text-slate-800"
+                className="px-6 py-3 text-slate-500 font-bold hover:text-slate-800 transition-colors"
               >
                 Cancel
               </button>
               <button 
-                onClick={handleAddLink}
-                disabled={isSaving || isScanning || !newLink.url || !newLink.title}
-                className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold shadow-sm transition-all ${isSaving || isScanning ? 'bg-slate-300 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                onClick={handleSaveLink}
+                disabled={isSaving || !generatedInfo}
+                className={`px-8 py-3 rounded-2xl font-black shadow-lg transition-all active:scale-95 ${isSaving || !generatedInfo ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}
               >
-                {isSaving ? 'Saving...' : 'Save to Library'}
+                {isSaving ? 'Processing...' : 'Save to Library'}
               </button>
             </div>
           </div>
@@ -339,57 +359,61 @@ const App: React.FC = () => {
 
       {/* AI Search Modal */}
       {isAiSearchOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-purple-50">
-              <div className="flex items-center gap-2">
-                <Brain className="text-purple-600" size={24} />
-                <h3 className="text-xl font-bold text-purple-900">AI Knowledge Assistant</h3>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
+            <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                  <Brain size={28} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black tracking-tight">Natural Language Search</h3>
+                  <p className="text-indigo-100 text-sm font-medium">Ask anything about your collection</p>
+                </div>
               </div>
-              <button onClick={() => setIsAiSearchOpen(false)} className="text-purple-400 hover:text-purple-600">
-                <X size={20} />
+              <button onClick={() => setIsAiSearchOpen(false)} className="p-2 text-indigo-100 hover:text-white hover:bg-white/10 rounded-full transition-all">
+                <X size={28} />
               </button>
             </div>
-            <div className="p-6">
-              <p className="text-slate-600 mb-6 text-sm">
-                Ask me about your links! For example: "Where is the design doc for the mobile app?" or "Find the spreadsheets related to taxation."
-              </p>
-              
-              <div className="relative mb-6">
+            
+            <div className="p-10">
+              <div className="relative mb-8">
                 <textarea 
-                  className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none h-32 resize-none"
-                  placeholder="Type your natural language query..."
+                  className="w-full pl-6 pr-14 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 focus:bg-white outline-none h-40 resize-none transition-all font-medium text-slate-700 text-lg shadow-inner"
+                  placeholder="e.g. Show me branding assets for the mobile project I added last week..."
                   value={aiQuery}
                   onChange={e => setAiQuery(e.target.value)}
                 />
                 <button 
                   onClick={handleAiSearch}
                   disabled={isSearchingWithAi || !aiQuery}
-                  className={`absolute right-3 bottom-3 p-2 rounded-lg transition-colors ${isSearchingWithAi ? 'bg-slate-200' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+                  className={`absolute right-4 bottom-4 p-4 rounded-2xl transition-all shadow-lg active:scale-90 ${isSearchingWithAi ? 'bg-slate-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'}`}
                 >
-                  <Search size={20} />
+                  <Search size={24} />
                 </button>
               </div>
 
-              {aiResponse && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-60 overflow-y-auto">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
-                      <Brain size={16} />
-                    </div>
-                    <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                      {aiResponse}
-                    </div>
+              {isSearchingWithAi && (
+                <div className="flex flex-col items-center justify-center py-10 gap-4">
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 bg-indigo-400 rounded-full animate-bounce"></div>
+                    <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce delay-100"></div>
+                    <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce delay-200"></div>
                   </div>
+                  <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Reasoning through library...</span>
                 </div>
               )}
 
-              {isSearchingWithAi && (
-                <div className="flex items-center justify-center py-10 gap-2">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce delay-75"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-150"></div>
-                  <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce delay-300"></div>
-                  <span className="text-sm font-medium text-slate-500 ml-2">AI is scanning your repository...</span>
+              {aiResponse && !isSearchingWithAi && (
+                <div className="bg-slate-50 border border-slate-200 rounded-[32px] p-8 max-h-[400px] overflow-y-auto animate-in fade-in duration-500 shadow-sm">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 shadow-sm">
+                      <Brain size={20} />
+                    </div>
+                    <div className="prose prose-slate prose-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-medium">
+                      {aiResponse}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
