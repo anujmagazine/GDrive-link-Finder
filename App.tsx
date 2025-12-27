@@ -104,11 +104,11 @@ const App: React.FC = () => {
       <aside className="w-full md:w-72 bg-white border-r border-slate-200 p-6 flex flex-col shrink-0">
         <div className="flex items-center gap-3 mb-10">
           <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-            <Database size={26} />
+            <Brain size={26} />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-slate-800">DriveKeeper</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v2.0 AI-Powered</p>
+            <h1 className="text-xl font-extrabold tracking-tight text-slate-800">Recall</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Never forget a link</p>
           </div>
         </div>
 
@@ -157,7 +157,7 @@ const App: React.FC = () => {
       <main className="flex-1 p-6 md:p-12 overflow-y-auto">
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Library</h2>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Recall Library</h2>
             <p className="text-slate-500 font-medium">Your curated knowledge base of Google Drive links.</p>
           </div>
           <div className="flex items-center gap-4">
@@ -166,14 +166,14 @@ const App: React.FC = () => {
               className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-600 rounded-2xl hover:bg-indigo-50 transition-all font-bold border-2 border-indigo-100 shadow-sm active:scale-95"
             >
               <Brain size={20} />
-              AI Search
+              AI Recall
             </button>
             <button 
               onClick={() => { resetForm(); setIsModalOpen(true); }}
               className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200 active:scale-95"
             >
               <Plus size={22} />
-              Add Resource
+              Add Link
             </button>
           </div>
         </header>
@@ -232,7 +232,7 @@ const App: React.FC = () => {
                     rel="noopener noreferrer"
                     className="group/link inline-flex items-center gap-2 px-5 py-2.5 bg-slate-50 text-slate-700 text-sm font-bold rounded-xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
                   >
-                    View Resource
+                    View Link
                     <ExternalLink size={16} className="group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
                   </a>
                 </div>
@@ -243,8 +243,8 @@ const App: React.FC = () => {
               <div className="w-24 h-24 bg-slate-100 rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-300">
                 <Database size={48} />
               </div>
-              <h4 className="text-xl font-bold text-slate-800 mb-2">No matches found</h4>
-              <p className="text-slate-500 max-w-xs mx-auto">Try a different keyword or add a new resource to your library.</p>
+              <h4 className="text-xl font-bold text-slate-800 mb-2">Recall is empty</h4>
+              <p className="text-slate-500 max-w-xs mx-auto">Add a new resource to start your digital memory collection.</p>
             </div>
           )}
         </div>
@@ -259,7 +259,7 @@ const App: React.FC = () => {
                 <div className="p-2 bg-indigo-600 rounded-xl text-white">
                   <Plus size={20} />
                 </div>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight">New Resource</h3>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Add to Recall</h3>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-full transition-all">
                 <X size={24} />
@@ -269,7 +269,7 @@ const App: React.FC = () => {
             <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Resource URL</label>
+                  <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Link URL</label>
                   <input 
                     type="url"
                     className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all font-medium"
@@ -280,12 +280,12 @@ const App: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Defining Keywords</label>
+                  <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Key Highlights / Keywords</label>
                   <div className="relative">
                     <input 
                       type="text"
                       className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all font-medium pr-32"
-                      placeholder="e.g. marketing, 2024, branding"
+                      placeholder="e.g. strategy doc, quarterly, q3"
                       value={keywords}
                       onChange={e => setKeywords(e.target.value)}
                     />
@@ -295,10 +295,10 @@ const App: React.FC = () => {
                       className={`absolute right-2 top-2 bottom-2 px-4 rounded-xl flex items-center gap-2 font-bold text-sm transition-all ${isGenerating ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-100'}`}
                     >
                       {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                      AI Generate
+                      Craft Entry
                     </button>
                   </div>
-                  <p className="mt-2 text-xs text-slate-400 font-medium italic">Keywords help AI craft a better search description for you.</p>
+                  <p className="mt-2 text-xs text-slate-400 font-medium italic">Keywords help AI generate a description that's easier for you to search later.</p>
                 </div>
               </div>
 
@@ -310,7 +310,7 @@ const App: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Professional Title (5-8 Words)</label>
+                    <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Generated Title</label>
                     <input 
                       type="text"
                       className="w-full px-5 py-4 bg-white border-2 border-indigo-100 rounded-2xl focus:border-indigo-400 outline-none transition-all font-bold text-slate-800"
@@ -320,13 +320,13 @@ const App: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Contextual Description</label>
+                    <label className="block text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Searchable Description</label>
                     <textarea 
                       className="w-full px-5 py-4 bg-white border-2 border-indigo-100 rounded-2xl focus:border-indigo-400 outline-none transition-all font-medium text-slate-600 h-32 resize-none"
                       value={generatedInfo.purpose}
                       onChange={e => setGeneratedInfo({...generatedInfo, purpose: e.target.value})}
                     />
-                    <p className="mt-2 text-xs text-slate-400">This description ensures natural language search works accurately.</p>
+                    <p className="mt-2 text-xs text-slate-400">This detailed context is what the AI Search uses to recall this link.</p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -350,7 +350,7 @@ const App: React.FC = () => {
                 disabled={isSaving || !generatedInfo}
                 className={`px-8 py-3 rounded-2xl font-black shadow-lg transition-all active:scale-95 ${isSaving || !generatedInfo ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}
               >
-                {isSaving ? 'Processing...' : 'Save to Library'}
+                {isSaving ? 'Filing...' : 'Confirm & Save'}
               </button>
             </div>
           </div>
@@ -367,8 +367,8 @@ const App: React.FC = () => {
                   <Brain size={28} />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black tracking-tight">Natural Language Search</h3>
-                  <p className="text-indigo-100 text-sm font-medium">Ask anything about your collection</p>
+                  <h3 className="text-2xl font-black tracking-tight">AI Recall Search</h3>
+                  <p className="text-indigo-100 text-sm font-medium">Find links using natural language</p>
                 </div>
               </div>
               <button onClick={() => setIsAiSearchOpen(false)} className="p-2 text-indigo-100 hover:text-white hover:bg-white/10 rounded-full transition-all">
@@ -380,7 +380,7 @@ const App: React.FC = () => {
               <div className="relative mb-8">
                 <textarea 
                   className="w-full pl-6 pr-14 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 focus:bg-white outline-none h-40 resize-none transition-all font-medium text-slate-700 text-lg shadow-inner"
-                  placeholder="e.g. Show me branding assets for the mobile project I added last week..."
+                  placeholder="Describe what you're looking for, e.g. 'the spreadsheet for q3 budgets'..."
                   value={aiQuery}
                   onChange={e => setAiQuery(e.target.value)}
                 />
@@ -400,7 +400,7 @@ const App: React.FC = () => {
                     <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce delay-100"></div>
                     <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce delay-200"></div>
                   </div>
-                  <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Reasoning through library...</span>
+                  <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Recalling Information...</span>
                 </div>
               )}
 
